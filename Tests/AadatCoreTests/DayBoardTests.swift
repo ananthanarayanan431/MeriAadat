@@ -238,6 +238,65 @@ struct RecentlyDeletedTests {
     }
 }
 
+@Suite("Notes")
+struct NoteTests {
+    let now = Date(timeIntervalSince1970: 1_800_000_000)
+    let calendar: Calendar = {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Kolkata")!
+        return calendar
+    }()
+
+    @Test("A note is trimmed, keeps its lines, and clears when empty")
+    func setNote() {
+        var board = DayBoard.empty(now: now, calendar: calendar)
+        let a = board.add("A", now: now)!
+        #expect(board.today[0].note == nil)
+
+        board.setNote(id: a.id, to: "  Call before 5pm\nAsk about the invoice \n\n")
+        #expect(board.today[0].note == "Call before 5pm\nAsk about the invoice")
+
+        board.setNote(id: a.id, to: "   \n ")
+        #expect(board.today[0].note == nil)
+    }
+
+    @Test("Long notes are cut to the maximum length")
+    func longNote() {
+        var board = DayBoard.empty(now: now, calendar: calendar)
+        let a = board.add("A", now: now)!
+        board.setNote(id: a.id, to: String(repeating: "x", count: DayBoard.maximumNoteLength + 50))
+        #expect(board.today[0].note?.count == DayBoard.maximumNoteLength)
+    }
+
+    @Test("A note travels with its task")
+    func noteTravels() {
+        var board = DayBoard.empty(now: now, calendar: calendar)
+        let a = board.add("A", now: now)!
+        let b = board.add("B", to: .tomorrow, now: now)!
+        board.setNote(id: a.id, to: "note a")
+        board.setNote(id: b.id, to: "note b")
+
+        board.pushToTomorrow(id: a.id)
+        #expect(board.tomorrow.first { $0.id == a.id }?.note == "note a")
+
+        board.remove(id: b.id, now: now)
+        #expect(board.deleted[0].item.note == "note b")
+        board.restore(id: b.id)
+
+        board.rollOver(now: now.addingTimeInterval(86_400), calendar: calendar)
+        #expect(board.today.compactMap(\.note).sorted() == ["note a", "note b"])
+    }
+
+    @Test("Tasks saved before notes existed still load")
+    func oldItemLoads() throws {
+        let json = #"{"id":"6F9619FF-8B86-D011-B42D-00C04FC964FF","title":"A","isDone":false,"createdAt":"2026-11-09T18:30:00Z"}"#
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let item = try decoder.decode(TodoItem.self, from: Data(json.utf8))
+        #expect(item.note == nil)
+    }
+}
+
 @Suite("BoardFileStore")
 struct BoardFileStoreTests {
     func makeStore() throws -> BoardFileStore {

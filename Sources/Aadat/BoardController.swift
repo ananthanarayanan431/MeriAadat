@@ -108,6 +108,10 @@ final class BoardController: ObservableObject {
         edit { $0.rename(id: item.id, to: title) }
     }
 
+    func setNote(_ item: TodoItem, to text: String) {
+        edit { $0.setNote(id: item.id, to: text) }
+    }
+
     func remove(_ item: TodoItem) {
         edit { $0.remove(id: item.id, now: Date()) }
     }

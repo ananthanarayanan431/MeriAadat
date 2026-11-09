@@ -4,13 +4,23 @@ import Foundation
 public struct TodoItem: Codable, Identifiable, Equatable, Sendable {
     public let id: UUID
     public var title: String
+    /// Optional short description. Older saved tasks have none.
+    public var note: String?
     public var isDone: Bool
     public let createdAt: Date
     public var completedAt: Date?
 
-    public init(id: UUID = UUID(), title: String, isDone: Bool = false, createdAt: Date, completedAt: Date? = nil) {
+    public init(
+        id: UUID = UUID(),
+        title: String,
+        note: String? = nil,
+        isDone: Bool = false,
+        createdAt: Date,
+        completedAt: Date? = nil
+    ) {
         self.id = id
         self.title = title
+        self.note = note
         self.isDone = isDone
         self.createdAt = createdAt
         self.completedAt = completedAt
@@ -46,6 +56,7 @@ public struct DayBoard: Codable, Equatable, Sendable {
     }
 
     public static let maximumTitleLength = 200
+    public static let maximumNoteLength = 500
     /// How long a deleted task can be restored.
     public static let deletedRetention: TimeInterval = 24 * 60 * 60
 
@@ -146,6 +157,17 @@ public struct DayBoard: Codable, Equatable, Sendable {
             today[index].title = title
         } else if let index = tomorrow.firstIndex(where: { $0.id == id }) {
             tomorrow[index].title = title
+        }
+    }
+
+    /// Sets a task's note. Blank text removes the note.
+    public mutating func setNote(id: UUID, to text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let note = trimmed.isEmpty ? nil : String(trimmed.prefix(Self.maximumNoteLength))
+        if let index = today.firstIndex(where: { $0.id == id }) {
+            today[index].note = note
+        } else if let index = tomorrow.firstIndex(where: { $0.id == id }) {
+            tomorrow[index].note = note
         }
     }
 

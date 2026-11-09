@@ -52,6 +52,8 @@
   Hover a deleted task to restore it or delete it now. After 24 hours it is gone for good.
   A task restored after midnight comes back to Today.
 - Double-click a task (or right-click, Edit) to rename it.
+- Give a task a short **note** with the pencil on hover, or right-click → Add Note.
+  The first lines show under the task. Return saves, Esc cancels.
 
 ## Install
 

@@ -354,10 +354,13 @@ private struct TaskRow: View {
     @State private var hovering = false
     @State private var editing = false
     @State private var draft = ""
-    @FocusState private var editFocused: Bool
+    @State private var noteDraft = ""
+    @FocusState private var focus: EditField?
+
+    private enum EditField { case title, note }
 
     var body: some View {
-        HStack(spacing: 9) {
+        HStack(alignment: .top, spacing: 9) {
             if list == .today {
                 Button { controller.toggleDone(item) } label: {
                     Image(systemName: item.isDone ? "checkmark.circle.fill" : "circle")
@@ -371,26 +374,28 @@ private struct TaskRow: View {
                 Image(systemName: "moon.stars")
                     .font(.system(size: 12))
                     .foregroundStyle(Color.indigo.opacity(0.8))
-                    .frame(width: 16)
+                    .frame(width: 16, height: 16)
             }
 
             if editing {
-                TextField("Task", text: $draft)
-                    .textFieldStyle(.plain)
-                    .focused($editFocused)
-                    .onSubmit(commitEdit)
-                    .onExitCommand { editing = false }
-                    .onChange(of: editFocused) { focused in
-                        if !focused { commitEdit() }
-                    }
+                editor
             } else {
-                Text(item.title)
-                    .strikethrough(item.isDone, color: .secondary)
-                    .foregroundStyle(item.isDone ? .secondary : .primary)
-                    .lineLimit(3)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .contentShape(Rectangle())
-                    .onTapGesture(count: 2, perform: startEdit)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(item.title)
+                        .strikethrough(item.isDone, color: .secondary)
+                        .foregroundStyle(item.isDone ? .secondary : .primary)
+                        .lineLimit(3)
+                    if let note = item.note {
+                        Text(note)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                            .help(note)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                .onTapGesture(count: 2) { startEdit(.title) }
             }
 
             if hovering && !editing {
@@ -408,7 +413,11 @@ private struct TaskRow: View {
             if list == .tomorrow {
                 Button("Move to Today") { controller.moveToToday(item) }
             }
-            Button("Edit") { startEdit() }
+            Button("Edit") { startEdit(.title) }
+            Button(item.note == nil ? "Add Note" : "Edit Note") { startEdit(.note) }
+            if item.note != nil {
+                Button("Remove Note") { controller.setNote(item, to: "") }
+            }
             Divider()
             Button("Delete") { controller.remove(item) }
         }
@@ -423,20 +432,60 @@ private struct TaskRow: View {
             if list == .tomorrow {
                 RowIcon("arrow.uturn.backward.circle", help: "Move back to today") { controller.moveToToday(item) }
             }
+            RowIcon("square.and.pencil", help: item.note == nil ? "Add a note" : "Edit task and note") {
+                startEdit(item.note == nil ? .note : .title)
+            }
             RowIcon("trash", help: "Delete (kept in Recently Deleted for 24 hours)") { controller.remove(item) }
         }
     }
 
-    private func startEdit() {
+    /// Title and note fields. Return saves, Escape cancels, Tab moves between the fields.
+    private var editor: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            TextField("Task", text: $draft)
+                .textFieldStyle(.plain)
+                .focused($focus, equals: .title)
+                .onSubmit(commitEdit)
+            TextField("Add a note", text: $noteDraft, axis: .vertical)
+                .textFieldStyle(.plain)
+                .font(.caption)
+                .lineLimit(1...5)
+                .focused($focus, equals: .note)
+                .onSubmit(commitEdit)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 4)
+                .background(RoundedRectangle(cornerRadius: 5, style: .continuous).fill(Color.primary.opacity(0.05)))
+            Text("Return to save · Esc to cancel")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .onExitCommand(perform: cancelEdit)
+        .onChange(of: focus) { field in
+            // Clicking outside the row saves, like other macOS lists.
+            if field == nil { commitEdit() }
+        }
+    }
+
+    private func startEdit(_ field: EditField) {
         draft = item.title
+        noteDraft = item.note ?? ""
         editing = true
-        editFocused = true
+        // Focus once the fields exist.
+        DispatchQueue.main.async { focus = field }
     }
 
     private func commitEdit() {
         guard editing else { return }
         editing = false
+        focus = nil
         controller.rename(item, to: draft)
+        controller.setNote(item, to: noteDraft)
+    }
+
+    private func cancelEdit() {
+        editing = false
+        focus = nil
     }
 }
 
