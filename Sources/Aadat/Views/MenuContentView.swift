@@ -7,26 +7,30 @@ struct MenuContentView: View {
     @State private var newTitle = ""
     @State private var addToTomorrow = false
     @State private var showingTomorrow = true
+    @State private var showingDeleted = false
     @FocusState private var fieldFocused: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 14) {
             header
             addField
-            todayList
+            todaySection
             tomorrowSection
+            deletedSection
             if let error = controller.lastError {
-                Label(error, systemImage: "exclamationmark.triangle")
+                Label(error, systemImage: "exclamationmark.triangle.fill")
                     .font(.caption)
+                    .foregroundStyle(.orange)
                     .padding(8)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(RoundedRectangle(cornerRadius: 6).fill(Color.orange.opacity(0.12)))
+                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.orange.opacity(0.12)))
             }
             Divider()
             footer
         }
-        .padding(14)
-        .frame(width: 340)
+        .padding(16)
+        .frame(width: 360)
+        .animation(.easeInOut(duration: 0.2), value: controller.board)
         .onAppear {
             controller.checkDay()
             controller.refreshLoginItemState()
@@ -38,42 +42,43 @@ struct MenuContentView: View {
 
     private var header: some View {
         let board = controller.board
-        return VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("Today").font(.headline)
-                Text(board.day.formatted(.dateTime.weekday(.wide).day().month(.abbreviated)))
+        return HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Today")
+                    .font(.system(size: 22, weight: .bold, design: .rounded))
+                Text(board.day.formatted(.dateTime.weekday(.wide).day().month(.wide)))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                Spacer()
-                Text(board.totalCount == 0 ? "No tasks" : "\(board.doneCount) of \(board.totalCount) done")
-                    .font(.subheadline.monospacedDigit())
-                    .foregroundStyle(.secondary)
             }
-            if board.totalCount > 0 {
-                ProgressView(value: Double(board.doneCount), total: Double(board.totalCount))
-                    .progressViewStyle(.linear)
-                    .tint(board.doneCount == board.totalCount ? .green : .accentColor)
-            }
+            Spacer()
+            ProgressRing(done: board.doneCount, total: board.totalCount)
         }
     }
 
     // MARK: Adding
 
     private var addField: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 8) {
+            Image(systemName: "plus.circle.fill")
+                .font(.system(size: 16))
+                .foregroundStyle(Color.accentColor)
             TextField(addToTomorrow ? "Add a task for tomorrow" : "Add a task for today", text: $newTitle)
-                .textFieldStyle(.roundedBorder)
+                .textFieldStyle(.plain)
                 .focused($fieldFocused)
                 .onSubmit(add)
-            Picker("List", selection: $addToTomorrow) {
-                Text("Today").tag(false)
-                Text("Tomorrow").tag(true)
-            }
-            .labelsHidden()
-            .pickerStyle(.menu)
-            .fixedSize()
-            .help("Which list new tasks go to")
+            ListToggle(addToTomorrow: $addToTomorrow)
         }
+        .padding(.leading, 10)
+        .padding(.trailing, 5)
+        .padding(.vertical, 6)
+        .background(
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .fill(Color.primary.opacity(0.05))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .strokeBorder(fieldFocused ? Color.accentColor.opacity(0.6) : Color.primary.opacity(0.08))
+        )
     }
 
     private func add() {
@@ -82,56 +87,65 @@ struct MenuContentView: View {
         fieldFocused = true
     }
 
-    // MARK: Lists
+    // MARK: Today
 
     @ViewBuilder
-    private var todayList: some View {
-        if controller.board.today.isEmpty {
-            Text("Nothing planned yet. Type a task above and press Return.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.vertical, 6)
-        } else {
-            ScrollView {
-                VStack(spacing: 2) {
-                    ForEach(controller.board.today) { item in
-                        TaskRow(item: item, list: .today, controller: controller)
-                    }
+    private var todaySection: some View {
+        let today = controller.board.today
+        if today.isEmpty {
+            HStack(spacing: 10) {
+                Image(systemName: "sun.max")
+                    .font(.system(size: 20))
+                    .foregroundStyle(.yellow)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("A clear day").font(.callout.weight(.medium))
+                    Text("Type a task above and press Return.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
-            .frame(maxHeight: 340)
-            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(12)
+            .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Color.primary.opacity(0.03)))
+        } else {
+            VStack(alignment: .leading, spacing: 4) {
+                SectionHeader(title: "Tasks", count: today.count) {
+                    if controller.board.doneCount > 0 {
+                        Button("Clear done", action: controller.clearDone)
+                            .buttonStyle(.plain)
+                            .font(.caption)
+                            .foregroundStyle(Color.accentColor)
+                            .help("Move finished tasks to Recently Deleted")
+                    }
+                }
+                ScrollView {
+                    VStack(spacing: 1) {
+                        ForEach(today) { item in
+                            TaskRow(item: item, list: .today, controller: controller)
+                                .transition(.opacity.combined(with: .move(edge: .top)))
+                        }
+                    }
+                }
+                .frame(maxHeight: 320)
+                .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
+
+    // MARK: Tomorrow
 
     @ViewBuilder
     private var tomorrowSection: some View {
         let tomorrow = controller.board.tomorrow
         if !tomorrow.isEmpty {
             VStack(alignment: .leading, spacing: 4) {
-                Button {
-                    showingTomorrow.toggle()
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: showingTomorrow ? "chevron.down" : "chevron.right")
-                            .font(.caption2.weight(.semibold))
-                            .frame(width: 10)
-                        Text("Tomorrow").font(.subheadline.weight(.semibold))
-                        Text("\(tomorrow.count)")
-                            .font(.caption.monospacedDigit())
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                    }
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-
+                SectionHeader(title: "Tomorrow", count: tomorrow.count, expanded: $showingTomorrow)
                 if showingTomorrow {
                     ScrollView {
-                        VStack(spacing: 2) {
+                        VStack(spacing: 1) {
                             ForEach(tomorrow) { item in
                                 TaskRow(item: item, list: .tomorrow, controller: controller)
+                                    .transition(.opacity)
                             }
                         }
                     }
@@ -139,7 +153,44 @@ struct MenuContentView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     Text("These move to Today at midnight.")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.tertiary)
+                        .padding(.leading, 6)
+                }
+            }
+        }
+    }
+
+    // MARK: Recently deleted
+
+    @ViewBuilder
+    private var deletedSection: some View {
+        let deleted = controller.board.deleted
+        if !deleted.isEmpty {
+            VStack(alignment: .leading, spacing: 4) {
+                SectionHeader(title: "Recently Deleted", count: deleted.count, expanded: $showingDeleted) {
+                    if showingDeleted {
+                        Button("Empty", action: controller.emptyDeleted)
+                            .buttonStyle(.plain)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                            .help("Delete all of these now")
+                    }
+                }
+                if showingDeleted {
+                    ScrollView {
+                        VStack(spacing: 1) {
+                            ForEach(deleted) { entry in
+                                DeletedRow(entry: entry, controller: controller)
+                                    .transition(.opacity)
+                            }
+                        }
+                    }
+                    .frame(maxHeight: 160)
+                    .fixedSize(horizontal: false, vertical: true)
+                    Text("Deleted tasks are kept for 24 hours.")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .padding(.leading, 6)
                 }
             }
         }
@@ -148,24 +199,149 @@ struct MenuContentView: View {
     // MARK: Footer
 
     private var footer: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            if controller.board.doneCount > 0 {
-                MenuButton("Clear done tasks", systemImage: "checkmark.circle.badge.xmark") { controller.clearDone() }
-            }
-            MenuButton(
-                controller.loginItemState == .enabled ? "Open at login: on" : "Open at login: off",
-                systemImage: controller.loginItemState == .enabled ? "checkmark.square" : "square"
-            ) {
-                controller.setLaunchAtLogin(controller.loginItemState != .enabled)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Toggle(isOn: Binding(
+                    get: { controller.loginItemState == .enabled },
+                    set: { controller.setLaunchAtLogin($0) }
+                )) {
+                    Text("Open at login").font(.callout)
+                }
+                .toggleStyle(.switch)
+                .controlSize(.mini)
+                Spacer()
+                Button {
+                    NSApp.terminate(nil)
+                } label: {
+                    Label("Quit", systemImage: "power")
+                        .font(.callout)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .keyboardShortcut("q")
+                .help("Quit Aadat (⌘Q)")
             }
             if controller.loginItemState == .requiresApproval {
                 Button("Allow Aadat in Login Items settings", action: controller.openLoginItemSettings)
                     .buttonStyle(.link)
                     .font(.caption)
-                    .padding(.leading, 6)
             }
-            MenuButton("Quit Aadat", systemImage: "power") { NSApp.terminate(nil) }
         }
+    }
+}
+
+// MARK: - Header pieces
+
+/// Today's progress as a ring with the count inside.
+private struct ProgressRing: View {
+    let done: Int
+    let total: Int
+
+    private var fraction: Double { total == 0 ? 0 : Double(done) / Double(total) }
+    private var allDone: Bool { total > 0 && done == total }
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(Color.primary.opacity(0.08), lineWidth: 4)
+            Circle()
+                .trim(from: 0, to: fraction)
+                .stroke(allDone ? Color.green : Color.accentColor, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+                .animation(.easeOut(duration: 0.35), value: fraction)
+            if allDone {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(.green)
+            } else {
+                Text("\(done)/\(total)")
+                    .font(.system(size: 11, weight: .semibold, design: .rounded).monospacedDigit())
+                    .foregroundStyle(total == 0 ? .secondary : .primary)
+            }
+        }
+        .frame(width: 42, height: 42)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(total == 0 ? "No tasks today" : "\(done) of \(total) tasks done")
+    }
+}
+
+/// A small capsule that switches new tasks between Today and Tomorrow.
+private struct ListToggle: View {
+    @Binding var addToTomorrow: Bool
+
+    var body: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.15)) { addToTomorrow.toggle() }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: addToTomorrow ? "moon.stars.fill" : "sun.max.fill")
+                Text(addToTomorrow ? "Tomorrow" : "Today")
+            }
+            .font(.caption.weight(.medium))
+            .foregroundStyle(addToTomorrow ? Color.indigo : Color.orange)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Capsule().fill((addToTomorrow ? Color.indigo : Color.orange).opacity(0.14)))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .help("New tasks go to \(addToTomorrow ? "Tomorrow" : "Today"). Click to switch.")
+        .accessibilityLabel("Add to \(addToTomorrow ? "Tomorrow" : "Today")")
+    }
+}
+
+/// A section title with a count, optionally collapsible, with an optional trailing control.
+private struct SectionHeader<Trailing: View>: View {
+    let title: String
+    let count: Int
+    var expanded: Binding<Bool>?
+    @ViewBuilder var trailing: Trailing
+
+    init(title: String, count: Int, expanded: Binding<Bool>? = nil, @ViewBuilder trailing: () -> Trailing) {
+        self.title = title
+        self.count = count
+        self.expanded = expanded
+        self.trailing = trailing()
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Button {
+                if let expanded { withAnimation(.easeInOut(duration: 0.2)) { expanded.wrappedValue.toggle() } }
+            } label: {
+                HStack(spacing: 6) {
+                    if let expanded {
+                        Image(systemName: "chevron.right")
+                            .font(.caption2.weight(.bold))
+                            .rotationEffect(.degrees(expanded.wrappedValue ? 90 : 0))
+                            .frame(width: 10)
+                            .foregroundStyle(.secondary)
+                    }
+                    Text(title.uppercased())
+                        .font(.caption.weight(.semibold))
+                        .tracking(0.5)
+                        .foregroundStyle(.secondary)
+                    Text("\(count)")
+                        .font(.caption2.weight(.semibold).monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 1)
+                        .background(Capsule().fill(Color.primary.opacity(0.08)))
+                    Spacer()
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .allowsHitTesting(expanded != nil)
+            trailing
+        }
+        .padding(.horizontal, 6)
+    }
+}
+
+extension SectionHeader where Trailing == EmptyView {
+    init(title: String, count: Int, expanded: Binding<Bool>? = nil) {
+        self.init(title: title, count: count, expanded: expanded) { EmptyView() }
     }
 }
 
@@ -181,21 +357,21 @@ private struct TaskRow: View {
     @FocusState private var editFocused: Bool
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 9) {
             if list == .today {
                 Button { controller.toggleDone(item) } label: {
                     Image(systemName: item.isDone ? "checkmark.circle.fill" : "circle")
-                        .font(.system(size: 15))
-                        .foregroundStyle(item.isDone ? Color.green : Color.secondary)
+                        .font(.system(size: 16))
+                        .foregroundStyle(item.isDone ? Color.green : Color.secondary.opacity(hovering ? 1 : 0.7))
                 }
                 .buttonStyle(.plain)
                 .help(item.isDone ? "Mark not done" : "Mark done")
                 .accessibilityLabel(item.isDone ? "Mark \(item.title) not done" : "Mark \(item.title) done")
             } else {
-                Image(systemName: "arrow.turn.down.right")
+                Image(systemName: "moon.stars")
                     .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 15)
+                    .foregroundStyle(Color.indigo.opacity(0.8))
+                    .frame(width: 16)
             }
 
             if editing {
@@ -209,7 +385,7 @@ private struct TaskRow: View {
                     }
             } else {
                 Text(item.title)
-                    .strikethrough(item.isDone)
+                    .strikethrough(item.isDone, color: .secondary)
                     .foregroundStyle(item.isDone ? .secondary : .primary)
                     .lineLimit(3)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -218,13 +394,13 @@ private struct TaskRow: View {
             }
 
             if hovering && !editing {
-                actions
+                actions.transition(.opacity)
             }
         }
-        .padding(.vertical, 5)
+        .padding(.vertical, 6)
         .padding(.horizontal, 6)
-        .background(RoundedRectangle(cornerRadius: 5).fill(hovering ? Color.primary.opacity(0.06) : .clear))
-        .onHover { hovering = $0 }
+        .background(RowBackground(hovering: hovering))
+        .onHover { hovering in withAnimation(.easeOut(duration: 0.12)) { self.hovering = hovering } }
         .contextMenu {
             if list == .today && !item.isDone {
                 Button("Push to Tomorrow") { controller.pushToTomorrow(item) }
@@ -240,14 +416,14 @@ private struct TaskRow: View {
 
     @ViewBuilder
     private var actions: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 8) {
             if list == .today && !item.isDone {
                 RowIcon("arrow.right.circle", help: "Push to tomorrow") { controller.pushToTomorrow(item) }
             }
             if list == .tomorrow {
                 RowIcon("arrow.uturn.backward.circle", help: "Move back to today") { controller.moveToToday(item) }
             }
-            RowIcon("trash", help: "Delete") { controller.remove(item) }
+            RowIcon("trash", help: "Delete (kept in Recently Deleted for 24 hours)") { controller.remove(item) }
         }
     }
 
@@ -261,6 +437,77 @@ private struct TaskRow: View {
         guard editing else { return }
         editing = false
         controller.rename(item, to: draft)
+    }
+}
+
+// MARK: - Deleted row
+
+private struct DeletedRow: View {
+    let entry: DeletedItem
+    @ObservedObject var controller: BoardController
+    @State private var hovering = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ListTag(list: entry.list)
+            Text(entry.item.title)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if hovering {
+                HStack(spacing: 8) {
+                    RowIcon("arrow.uturn.backward.circle", help: "Restore") { controller.restore(entry) }
+                    RowIcon("xmark.circle", help: "Delete now") { controller.deleteForever(entry) }
+                }
+                .transition(.opacity)
+            } else {
+                Text(timeLeft)
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .padding(.vertical, 6)
+        .padding(.horizontal, 6)
+        .background(RowBackground(hovering: hovering))
+        .onHover { hovering in withAnimation(.easeOut(duration: 0.12)) { self.hovering = hovering } }
+        .contextMenu {
+            Button("Restore") { controller.restore(entry) }
+            Divider()
+            Button("Delete Now") { controller.deleteForever(entry) }
+        }
+    }
+
+    private var timeLeft: String {
+        let seconds = max(0, entry.expiresAt.timeIntervalSinceNow)
+        let hours = Int(seconds / 3600)
+        return hours >= 1 ? "\(hours)h left" : "\(max(1, Int(seconds / 60)))m left"
+    }
+}
+
+/// Which list a deleted task came from.
+private struct ListTag: View {
+    let list: DayBoard.List
+
+    var body: some View {
+        let color: Color = list == .today ? .orange : .indigo
+        Text(list == .today ? "Today" : "Tomorrow")
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(color)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(Capsule().fill(color.opacity(0.14)))
+            .fixedSize()
+    }
+}
+
+// MARK: - Shared pieces
+
+private struct RowBackground: View {
+    let hovering: Bool
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 7, style: .continuous)
+            .fill(hovering ? Color.primary.opacity(0.06) : .clear)
     }
 }
 
@@ -278,38 +525,12 @@ private struct RowIcon: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: systemImage)
-                .font(.system(size: 13))
+                .font(.system(size: 14))
                 .foregroundStyle(.secondary)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .help(help)
         .accessibilityLabel(help)
-    }
-}
-
-/// A full-width, menu-like button.
-struct MenuButton: View {
-    let title: String
-    let systemImage: String
-    let action: () -> Void
-    @State private var hovering = false
-
-    init(_ title: String, systemImage: String, action: @escaping () -> Void) {
-        self.title = title
-        self.systemImage = systemImage
-        self.action = action
-    }
-
-    var body: some View {
-        Button(action: action) {
-            Label(title, systemImage: systemImage)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.vertical, 4)
-                .padding(.horizontal, 6)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .background(RoundedRectangle(cornerRadius: 5).fill(hovering ? Color.primary.opacity(0.08) : .clear))
-        .onHover { hovering = $0 }
     }
 }
