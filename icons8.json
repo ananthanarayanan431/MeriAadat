@@ -1,0 +1,16 @@
+{
+  "version": 2,
+  "icons": {
+    "pack": "fluency",
+    "sizes": [96, 256],
+    "color": "original",
+    "items": {
+      "logo": { "commonName": "task-completed", "file": "docs/images/logo.png" },
+      "today": { "commonName": "sun", "file": "docs/images/sun.png" },
+      "tomorrow": { "commonName": "crescent-moon", "file": "docs/images/crescent-moon.png" },
+      "midnight": { "commonName": "midnight", "file": "docs/images/midnight.png" },
+      "recently-deleted": { "commonName": "trash", "file": "docs/images/trash.png" },
+      "private": { "commonName": "lock", "file": "docs/images/lock.png" }
+    }
+  }
+}
