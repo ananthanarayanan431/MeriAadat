@@ -118,10 +118,123 @@ struct DayBoardTests {
         #expect(board.today[0].title == "A")
 
         board.toggleDone(id: a.id, now: date(10, 9))
-        board.clearDone()
+        board.clearDone(now: date(10, 9))
         #expect(board.today.isEmpty)
-        board.remove(id: b.id)
+        board.remove(id: b.id, now: date(10, 9))
         #expect(board.tomorrow.isEmpty)
+    }
+}
+
+@Suite("Recently deleted")
+struct RecentlyDeletedTests {
+    let calendar: Calendar = {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Kolkata")!
+        return calendar
+    }()
+
+    func date(_ day: Int, _ hour: Int, _ minute: Int = 0) -> Date {
+        calendar.date(from: DateComponents(year: 2026, month: 11, day: day, hour: hour, minute: minute))!
+    }
+
+    @Test("Deleting keeps the task, newest first, tagged with its list")
+    func deleteKeeps() {
+        var board = DayBoard.empty(now: date(10, 9), calendar: calendar)
+        let a = board.add("A", now: date(10, 9))!
+        let b = board.add("B", to: .tomorrow, now: date(10, 9))!
+        board.remove(id: a.id, now: date(10, 10))
+        board.remove(id: b.id, now: date(10, 11))
+
+        #expect(board.today.isEmpty)
+        #expect(board.tomorrow.isEmpty)
+        #expect(board.deleted.map(\.item.title) == ["B", "A"])
+        #expect(board.deleted.map(\.list) == [.tomorrow, .today])
+        #expect(board.deleted[1].deletedAt == date(10, 10))
+    }
+
+    @Test("Clear done sends done tasks to recently deleted")
+    func clearDoneKeeps() {
+        var board = DayBoard.empty(now: date(10, 9), calendar: calendar)
+        let a = board.add("A", now: date(10, 9))!
+        board.add("B", now: date(10, 9))
+        board.toggleDone(id: a.id, now: date(10, 9))
+        board.clearDone(now: date(10, 12))
+        #expect(board.today.map(\.title) == ["B"])
+        #expect(board.deleted.map(\.item.title) == ["A"])
+        #expect(board.deleted[0].item.isDone)
+    }
+
+    @Test("Restore puts a task back on the list it came from")
+    func restoreSameDay() {
+        var board = DayBoard.empty(now: date(10, 9), calendar: calendar)
+        let a = board.add("A", now: date(10, 9))!
+        let b = board.add("B", to: .tomorrow, now: date(10, 9))!
+        board.toggleDone(id: a.id, now: date(10, 9))
+        board.remove(id: a.id, now: date(10, 10))
+        board.remove(id: b.id, now: date(10, 10))
+
+        board.restore(id: a.id)
+        board.restore(id: b.id)
+        #expect(board.today.map(\.title) == ["A"])
+        #expect(board.today[0].isDone)
+        #expect(board.tomorrow.map(\.title) == ["B"])
+        #expect(board.deleted.isEmpty)
+    }
+
+    @Test("After midnight a restored task comes back to today, not done")
+    func restoreNextDay() {
+        var board = DayBoard.empty(now: date(10, 9), calendar: calendar)
+        let a = board.add("A", now: date(10, 9))!
+        let b = board.add("B", to: .tomorrow, now: date(10, 9))!
+        board.toggleDone(id: a.id, now: date(10, 9))
+        board.remove(id: a.id, now: date(10, 20))
+        board.remove(id: b.id, now: date(10, 20))
+        board.rollOver(now: date(11, 8), calendar: calendar)
+        #expect(board.deleted.count == 2)
+
+        board.restore(id: a.id)
+        board.restore(id: b.id)
+        #expect(board.today.map(\.title) == ["A", "B"])
+        #expect(board.today.allSatisfy { !$0.isDone && $0.completedAt == nil })
+        #expect(board.tomorrow.isEmpty)
+    }
+
+    @Test("Deleted tasks are gone for good after 24 hours")
+    func expiry() {
+        var board = DayBoard.empty(now: date(10, 9), calendar: calendar)
+        let a = board.add("A", now: date(10, 9))!
+        let b = board.add("B", now: date(10, 9))!
+        board.remove(id: a.id, now: date(10, 10))
+        board.remove(id: b.id, now: date(10, 12))
+
+        let early = board.purgeExpiredDeleted(now: date(11, 9, 59))
+        #expect(!early)
+        #expect(board.deleted.count == 2)
+        let onTime = board.purgeExpiredDeleted(now: date(11, 10))
+        #expect(onTime)
+        #expect(board.deleted.map(\.item.title) == ["B"])
+    }
+
+    @Test("Delete forever and empty")
+    func deleteForever() {
+        var board = DayBoard.empty(now: date(10, 9), calendar: calendar)
+        let a = board.add("A", now: date(10, 9))!
+        let b = board.add("B", now: date(10, 9))!
+        board.remove(id: a.id, now: date(10, 10))
+        board.remove(id: b.id, now: date(10, 10))
+        board.deleteForever(id: a.id)
+        #expect(board.deleted.map(\.item.title) == ["B"])
+        board.emptyDeleted()
+        #expect(board.deleted.isEmpty)
+    }
+
+    @Test("A board saved before this feature still loads")
+    func oldFileLoads() throws {
+        let json = #"{"day":"2026-11-09T18:30:00Z","today":[],"tomorrow":[]}"#
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let board = try decoder.decode(DayBoard.self, from: Data(json.utf8))
+        #expect(board.deleted.isEmpty)
     }
 }
 

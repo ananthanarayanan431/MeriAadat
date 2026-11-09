@@ -17,6 +17,19 @@ public struct TodoItem: Codable, Identifiable, Equatable, Sendable {
     }
 }
 
+/// A task that was deleted, kept for `DayBoard.deletedRetention` so it can be restored.
+public struct DeletedItem: Codable, Identifiable, Equatable, Sendable {
+    public var item: TodoItem
+    /// The list the task was deleted from.
+    public let list: DayBoard.List
+    public let deletedAt: Date
+    /// The board's day when the task was deleted.
+    public let day: Date
+
+    public var id: UUID { item.id }
+    public var expiresAt: Date { deletedAt.addingTimeInterval(DayBoard.deletedRetention) }
+}
+
 /// Today's list plus the list waiting for tomorrow.
 ///
 /// Rules:
@@ -25,6 +38,7 @@ public struct TodoItem: Codable, Identifiable, Equatable, Sendable {
 /// - When the day ends, today's list is cleared and tomorrow's list becomes today's.
 /// - If several days pass with the app closed, tasks pushed to "tomorrow" are still carried
 ///   into the next day the app sees, so nothing that was pushed is lost.
+/// - Deleted tasks go to `deleted` (newest first) and are kept for 24 hours.
 public struct DayBoard: Codable, Equatable, Sendable {
     public enum List: String, Codable, Sendable {
         case today
@@ -32,16 +46,34 @@ public struct DayBoard: Codable, Equatable, Sendable {
     }
 
     public static let maximumTitleLength = 200
+    /// How long a deleted task can be restored.
+    public static let deletedRetention: TimeInterval = 24 * 60 * 60
 
     /// Start (local midnight) of the day `today` belongs to.
     public private(set) var day: Date
     public private(set) var today: [TodoItem]
     public private(set) var tomorrow: [TodoItem]
+    /// Recently deleted tasks, newest first.
+    public private(set) var deleted: [DeletedItem]
 
-    public init(day: Date, today: [TodoItem] = [], tomorrow: [TodoItem] = []) {
+    public init(day: Date, today: [TodoItem] = [], tomorrow: [TodoItem] = [], deleted: [DeletedItem] = []) {
         self.day = day
         self.today = today
         self.tomorrow = tomorrow
+        self.deleted = deleted
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case day, today, tomorrow, deleted
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        day = try container.decode(Date.self, forKey: .day)
+        today = try container.decode([TodoItem].self, forKey: .today)
+        tomorrow = try container.decode([TodoItem].self, forKey: .tomorrow)
+        // Boards saved before "Recently deleted" existed have no such key.
+        deleted = try container.decodeIfPresent([DeletedItem].self, forKey: .deleted) ?? []
     }
 
     public static func empty(now: Date, calendar: Calendar) -> DayBoard {
@@ -117,14 +149,60 @@ public struct DayBoard: Codable, Equatable, Sendable {
         }
     }
 
-    public mutating func remove(id: UUID) {
-        today.removeAll { $0.id == id }
-        tomorrow.removeAll { $0.id == id }
+    /// Moves a task to Recently Deleted.
+    public mutating func remove(id: UUID, now: Date) {
+        if let index = today.firstIndex(where: { $0.id == id }) {
+            keepDeleted(today.remove(at: index), from: .today, now: now)
+        } else if let index = tomorrow.firstIndex(where: { $0.id == id }) {
+            keepDeleted(tomorrow.remove(at: index), from: .tomorrow, now: now)
+        }
     }
 
-    /// Removes done tasks from today's list before midnight.
-    public mutating func clearDone() {
-        today.removeAll { $0.isDone }
+    /// Moves done tasks from today's list to Recently Deleted before midnight.
+    public mutating func clearDone(now: Date) {
+        for item in today.filter(\.isDone) {
+            remove(id: item.id, now: now)
+        }
+    }
+
+    // MARK: Recently deleted
+
+    /// Puts a deleted task back on the list it came from. If the day has changed since,
+    /// that list's day has already arrived (or passed), so the task comes back to today, not done.
+    public mutating func restore(id: UUID) {
+        guard let index = deleted.firstIndex(where: { $0.id == id }) else { return }
+        let entry = deleted.remove(at: index)
+        var item = entry.item
+        if entry.day == day {
+            switch entry.list {
+            case .today: today.append(item)
+            case .tomorrow: tomorrow.append(item)
+            }
+        } else {
+            item.isDone = false
+            item.completedAt = nil
+            today.append(item)
+        }
+    }
+
+    public mutating func deleteForever(id: UUID) {
+        deleted.removeAll { $0.id == id }
+    }
+
+    public mutating func emptyDeleted() {
+        deleted = []
+    }
+
+    /// Drops deleted tasks older than `deletedRetention`. Returns true if anything was dropped.
+    @discardableResult
+    public mutating func purgeExpiredDeleted(now: Date) -> Bool {
+        let before = deleted.count
+        deleted.removeAll { $0.expiresAt <= now }
+        return deleted.count != before
+    }
+
+    private mutating func keepDeleted(_ item: TodoItem, from list: List, now: Date) {
+        deleted.insert(DeletedItem(item: item, list: list, deletedAt: now, day: day), at: 0)
     }
 
     private static func clean(_ title: String) -> String? {

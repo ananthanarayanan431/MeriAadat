@@ -36,7 +36,9 @@ final class BoardController: ObservableObject {
         }
         self.store = store
         self.board = board ?? .empty(now: now, calendar: .autoupdatingCurrent)
-        if self.board.rollOver(now: now, calendar: calendar) { save() }
+        let rolled = self.board.rollOver(now: now, calendar: calendar)
+        let purged = self.board.purgeExpiredDeleted(now: now)
+        if rolled || purged { save() }
     }
 
     func start() {
@@ -58,12 +60,13 @@ final class BoardController: ObservableObject {
 
     // MARK: Day change
 
-    /// Rolls the board over if the day has changed.
+    /// Rolls the board over if the day has changed, and drops deleted tasks older than 24 hours.
     func checkDay() {
-        if board.rollOver(now: Date(), calendar: calendar) {
-            Log.app.notice("New day; tomorrow's tasks moved to today")
-            save()
-        }
+        let now = Date()
+        let rolled = board.rollOver(now: now, calendar: calendar)
+        if rolled { Log.app.notice("New day; tomorrow's tasks moved to today") }
+        let purged = board.purgeExpiredDeleted(now: now)
+        if rolled || purged { save() }
     }
 
     private func scheduleMidnight() {
@@ -106,15 +109,29 @@ final class BoardController: ObservableObject {
     }
 
     func remove(_ item: TodoItem) {
-        edit { $0.remove(id: item.id) }
+        edit { $0.remove(id: item.id, now: Date()) }
     }
 
     func clearDone() {
-        edit { $0.clearDone() }
+        edit { $0.clearDone(now: Date()) }
+    }
+
+    func restore(_ entry: DeletedItem) {
+        edit { $0.restore(id: entry.id) }
+    }
+
+    func deleteForever(_ entry: DeletedItem) {
+        edit { $0.deleteForever(id: entry.id) }
+    }
+
+    func emptyDeleted() {
+        edit { $0.emptyDeleted() }
     }
 
     private func edit(_ change: (inout DayBoard) -> Void) {
-        board.rollOver(now: Date(), calendar: calendar)
+        let now = Date()
+        board.rollOver(now: now, calendar: calendar)
+        board.purgeExpiredDeleted(now: now)
         change(&board)
         save()
     }
