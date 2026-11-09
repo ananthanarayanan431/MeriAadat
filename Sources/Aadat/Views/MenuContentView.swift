@@ -439,25 +439,36 @@ private struct TaskRow: View {
         }
     }
 
-    /// Title and note fields. Return saves, Escape cancels, Tab moves between the fields.
+    /// Title and note fields, each labelled and boxed so it is clear which one is being edited.
+    /// Return saves, Escape cancels, Tab moves between the fields.
     private var editor: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            TextField("Task", text: $draft)
-                .textFieldStyle(.plain)
-                .focused($focus, equals: .title)
-                .onSubmit(commitEdit)
-            TextField("Add a note", text: $noteDraft, axis: .vertical)
-                .textFieldStyle(.plain)
-                .font(.caption)
-                .lineLimit(1...5)
-                .focused($focus, equals: .note)
-                .onSubmit(commitEdit)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 4)
-                .background(RoundedRectangle(cornerRadius: 5, style: .continuous).fill(Color.primary.opacity(0.05)))
-            Text("Return to save · Esc to cancel")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
+        VStack(alignment: .leading, spacing: 8) {
+            EditorField(label: "Title", systemImage: "textformat", focused: focus == .title) {
+                TextField("Task name", text: $draft)
+                    .textFieldStyle(.plain)
+                    .font(.body.weight(.medium))
+                    .focused($focus, equals: .title)
+                    .onSubmit(commitEdit)
+            }
+            EditorField(label: "Note", systemImage: "note.text", focused: focus == .note) {
+                TextField("Optional details", text: $noteDraft, axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2...5)
+                    .focused($focus, equals: .note)
+                    .onSubmit(commitEdit)
+            }
+            HStack {
+                Text("Return to save · Esc to cancel")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                Spacer()
+                Text("\(noteDraft.count)/\(DayBoard.maximumNoteLength)")
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(noteDraft.count > DayBoard.maximumNoteLength ? Color.red : Color.secondary.opacity(0.6))
+                    .opacity(focus == .note ? 1 : 0)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .onExitCommand(perform: cancelEdit)
@@ -486,6 +497,35 @@ private struct TaskRow: View {
     private func cancelEdit() {
         editing = false
         focus = nil
+    }
+}
+
+/// A labelled, boxed input used in the task editor. The focused one gets an accent border.
+private struct EditorField<Content: View>: View {
+    let label: String
+    let systemImage: String
+    let focused: Bool
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Label(label.uppercased(), systemImage: systemImage)
+                .font(.caption2.weight(.semibold))
+                .tracking(0.5)
+                .foregroundStyle(focused ? Color.accentColor : Color.secondary)
+            content
+                .padding(.horizontal, 7)
+                .padding(.vertical, 5)
+                .background(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(Color(nsColor: .textBackgroundColor).opacity(0.8))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .strokeBorder(focused ? Color.accentColor : Color.primary.opacity(0.12), lineWidth: focused ? 1.5 : 1)
+                )
+        }
+        .animation(.easeOut(duration: 0.12), value: focused)
     }
 }
 
