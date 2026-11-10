@@ -8,6 +8,8 @@
 	<string>Aadat</string>
 	<key>CFBundleExecutable</key>
 	<string>Aadat</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
 	<string>io.github.ananthanarayanan431.aadat</string>
 	<key>CFBundleInfoDictionaryVersion</key>

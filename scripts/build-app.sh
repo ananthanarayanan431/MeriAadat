@@ -59,6 +59,19 @@ sed "s/__VERSION__/$VERSION/g" "$ROOT/Resources/Info.plist" > "$APP/Contents/Inf
 plutil -lint -s "$APP/Contents/Info.plist"
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 
+echo "==> Generating app icon"
+ICONSET="$(mktemp -d)/AppIcon.iconset"
+mkdir -p "$ICONSET"
+for size in 16 32 128 256; do
+  sips -z "$size" "$size" "$ROOT/docs/images/logo.png" --out "$ICONSET/icon_${size}x${size}.png" >/dev/null
+  double=$((size * 2))
+  if (( double <= 256 )); then
+    sips -z "$double" "$double" "$ROOT/docs/images/logo.png" --out "$ICONSET/icon_${size}x${size}@2x.png" >/dev/null
+  fi
+done
+iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"
+rm -rf -- "$(dirname "$ICONSET")"
+
 echo "==> Signing ad hoc"
 # Hardened runtime adds protection at no cost; no entitlements are requested.
 codesign --force --sign - --options runtime --timestamp=none "$APP"
