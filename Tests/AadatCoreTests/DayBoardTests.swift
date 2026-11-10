@@ -51,7 +51,7 @@ struct DayBoardTests {
         #expect(board.totalCount == 1)
     }
 
-    @Test("At midnight today clears and tomorrow becomes today")
+    @Test("At midnight done tasks clear; unfinished and tomorrow's tasks become today")
     func midnight() {
         var board = DayBoard.empty(now: date(10, 9), calendar: calendar)
         let done = board.add("Done task", now: date(10, 9))!
@@ -65,9 +65,22 @@ struct DayBoardTests {
         #expect(changed)
 
         #expect(board.day == date(11, 0))
-        #expect(board.today.map(\.title) == ["Pushed task", "Planned task"])
+        #expect(board.today.map(\.title) == ["Unfinished task", "Pushed task", "Planned task"])
         #expect(board.tomorrow.isEmpty)
         #expect(board.doneCount == 0)
+    }
+
+    @Test("Unfinished tasks carry over across several skipped days, keeping their notes")
+    func unfinishedSkippedDays() {
+        var board = DayBoard.empty(now: date(10, 9), calendar: calendar)
+        let a = board.add("Forgot to push", now: date(10, 9))!
+        board.setNote(id: a.id, to: "Call back")
+        let b = board.add("Finished", now: date(10, 9))!
+        board.toggleDone(id: b.id, now: date(10, 12))
+
+        board.rollOver(now: date(14, 8), calendar: calendar)
+        #expect(board.today.map(\.id) == [a.id])
+        #expect(board.today.first?.note == "Call back")
     }
 
     @Test("Pushed tasks survive several days with the app closed")

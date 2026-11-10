@@ -64,7 +64,7 @@ final class BoardController: ObservableObject {
     func checkDay() {
         let now = Date()
         let rolled = board.rollOver(now: now, calendar: calendar)
-        if rolled { Log.app.notice("New day; tomorrow's tasks moved to today") }
+        if rolled { Log.app.notice("New day; unfinished and tomorrow's tasks moved to today") }
         let purged = board.purgeExpiredDeleted(now: now)
         if rolled || purged { save() }
     }

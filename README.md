@@ -28,7 +28,7 @@
   </tr>
   <tr>
     <td align="center"><img src="docs/images/midnight.png" width="40" alt=""></td>
-    <td><b>Fresh start at midnight</b><br>Today's list clears and Tomorrow's tasks become Today's, even if the Mac was asleep.</td>
+    <td><b>Fresh start at midnight</b><br>Done tasks clear, unfinished ones carry over, and Tomorrow's tasks join Today, even if the Mac was asleep.</td>
   </tr>
   <tr>
     <td align="center"><img src="docs/images/trash.png" width="40" alt=""></td>
@@ -44,10 +44,10 @@
 
 - Click the circle to mark a task **done**. Done tasks stay on the list, struck through, until the day ends.
 - **Push to tomorrow** (the arrow on hover, or right-click) moves an unfinished task to the **Tomorrow** list.
-- At **midnight** (local time) today's list is cleared and Tomorrow's tasks become Today's.
-  Unfinished tasks that were not pushed are dropped with the old day.
+- At **midnight** (local time) done tasks are cleared and Tomorrow's tasks move to Today.
+  Unfinished tasks you didn't push carry over automatically, listed first, so nothing is lost if you forget.
 - If the Mac is asleep or off at midnight, the switch happens as soon as it wakes or Aadat starts.
-  Tasks pushed to tomorrow are never lost, even if several days pass.
+  Unfinished and pushed tasks are never lost, even if several days pass.
 - **Delete** (the trash icon on hover, or right-click) moves a task to **Recently Deleted**, as does **Clear done**.
   Hover a deleted task to restore it or delete it now. After 24 hours it is gone for good.
   A task restored after midnight comes back to Today.

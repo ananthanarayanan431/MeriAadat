@@ -45,9 +45,10 @@ public struct DeletedItem: Codable, Identifiable, Equatable, Sendable {
 /// Rules:
 /// - A day runs from local midnight to the next local midnight.
 /// - Done tasks stay on today's list (marked done) until the day ends.
-/// - When the day ends, today's list is cleared and tomorrow's list becomes today's.
-/// - If several days pass with the app closed, tasks pushed to "tomorrow" are still carried
-///   into the next day the app sees, so nothing that was pushed is lost.
+/// - When the day ends, done tasks are cleared. Unfinished tasks carry over automatically,
+///   followed by tomorrow's list, so a task you forgot to push is never lost.
+/// - If several days pass with the app closed, everything unfinished is still carried
+///   into the next day the app sees.
 /// - Deleted tasks go to `deleted` (newest first) and are kept for 24 hours.
 public struct DayBoard: Codable, Equatable, Sendable {
     public enum List: String, Codable, Sendable {
@@ -107,7 +108,8 @@ public struct DayBoard: Codable, Equatable, Sendable {
     public mutating func rollOver(now: Date, calendar: Calendar) -> Bool {
         let start = calendar.startOfDay(for: now)
         guard start > day else { return false }
-        today = tomorrow.map { item in
+        let unfinished = today.filter { !$0.isDone }
+        today = unfinished + tomorrow.map { item in
             var item = item
             item.isDone = false
             item.completedAt = nil
